@@ -2,8 +2,10 @@ package xhttp
 
 import (
 	"bytes"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -12,7 +14,7 @@ type testRequest struct {
 	mtd  string
 	msg  string
 	body []byte
-	err  error
+	fail bool
 }
 
 func createTestHandler(code int, msg string) http.HandlerFunc {
@@ -150,5 +152,67 @@ func TestPost(t *testing.T) {
 				tt.Errorf("expected resp code %d, actual is %d", tc.expected.code, tc.actual.StatusCode)
 			}
 		})
+	}
+}
+
+func TestDownloadFile(t *testing.T) {
+	type testCase struct {
+		expected *testRequest
+		actual   *Response
+	}
+
+	tests := []*testCase{
+		{expected: &testRequest{code: 200, msg: "success"}},
+		{expected: &testRequest{code: 400, msg: "bad request", fail: true}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.expected.msg, func(tt *testing.T) {
+			tcFile, err := ioutil.TempFile(os.TempDir(), "_xhttp_DownloadFile")
+			if err != nil {
+				tt.Errorf("failed to create test file: %s", err)
+			}
+			tcFile.Close()
+
+			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
+			if err := DownloadFile(srv.URL, tcFile.Name()); err != nil {
+				os.Remove(tcFile.Name())
+
+				if !tc.expected.fail {
+					srv.Close()
+					tt.Errorf("failed to DownloadFile: %s", err)
+				}
+
+				if tc.expected.fail {
+					srv.Close()
+					return
+				}
+			}
+
+			actual, err := ioutil.ReadFile(tcFile.Name())
+			if err != nil {
+				os.Remove(tcFile.Name())
+				tt.Errorf("failed to Read file: %s", err)
+			}
+
+			if !bytes.Equal([]byte(tc.expected.msg), actual) {
+				os.Remove(tcFile.Name())
+				tt.Errorf("expected: %s, got %s", tc.expected.msg, string(actual))
+			}
+
+			os.Remove(tcFile.Name())
+		})
+	}
+}
+
+func TestSetContentTypeJSON(t *testing.T) {
+	expHeader := "Content-Type"
+	expValue := "application/json"
+
+	req := NewRequest("http://localhost", http.MethodGet, []byte(nil))
+	req.SetContentTypeJSON()
+
+	if act := req.Header.Get(expHeader); act != expValue {
+		t.Errorf("expected %s, got %s", expValue, act)
 	}
 }
