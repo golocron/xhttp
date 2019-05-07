@@ -65,6 +65,7 @@ func TestSend(t *testing.T) {
 		{expected: &testRequest{code: 200, mtd: http.MethodGet, msg: "success"}},
 		{expected: &testRequest{code: 400, mtd: http.MethodGet, msg: "bad request"}},
 		{expected: &testRequest{code: 500, mtd: http.MethodGet, msg: "internal server error"}},
+		{expected: &testRequest{code: 0, mtd: "WRONG", msg: "wrong", fail: true}},
 	}
 
 	for _, tc := range tests {
@@ -77,6 +78,10 @@ func TestSend(t *testing.T) {
 			tc.actual, err = Send(req)
 			if err != nil {
 				srv.Close()
+				if tc.expected.fail {
+					return
+				}
+
 				tt.Errorf("failed to Send: %s", err)
 			}
 			srv.Close()
@@ -177,14 +182,13 @@ func TestDownloadFile(t *testing.T) {
 			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
 			if err := DownloadFile(srv.URL, tcFile.Name()); err != nil {
 				os.Remove(tcFile.Name())
+				srv.Close()
 
 				if !tc.expected.fail {
-					srv.Close()
 					tt.Errorf("failed to DownloadFile: %s", err)
 				}
 
 				if tc.expected.fail {
-					srv.Close()
 					return
 				}
 			}
@@ -209,10 +213,116 @@ func TestSetContentTypeJSON(t *testing.T) {
 	expHeader := "Content-Type"
 	expValue := "application/json"
 
+	// Case with non-nil Request.Header map.
 	req := NewRequest("http://localhost", http.MethodGet, []byte(nil))
 	req.SetContentTypeJSON()
 
 	if act := req.Header.Get(expHeader); act != expValue {
 		t.Errorf("expected %s, got %s", expValue, act)
+	}
+
+	// Case with nil Request.Header map.
+	req = &Request{
+		BaseURL: "http://localhost",
+		Method:  http.MethodGet,
+	}
+
+	req.SetContentTypeJSON()
+
+	if act := req.Header.Get(expHeader); act != expValue {
+		t.Errorf("expected %s, got %s", expValue, act)
+	}
+}
+
+func TestSetContentType(t *testing.T) {
+	expHeader := "Content-Type"
+	expValue := "application/test-content-type"
+
+	// Case with non-nil Request.Header map.
+	req := NewRequest("http://localhost", http.MethodGet, []byte(nil))
+	req.SetContentType(expValue)
+
+	if act := req.Header.Get(expHeader); act != expValue {
+		t.Errorf("expected %s, got %s", expValue, act)
+	}
+
+	// Case with nil Request.Header map.
+	req = &Request{
+		BaseURL: "http://localhost",
+		Method:  http.MethodGet,
+	}
+
+	req.SetContentType(expValue)
+
+	if act := req.Header.Get(expHeader); act != expValue {
+		t.Errorf("expected %s, got %s", expValue, act)
+	}
+}
+
+func TestSetAuthorization(t *testing.T) {
+	expHeader := "Authorization"
+	expValue := "Test: Authorization"
+
+	// Case with non-nil Request.Header map.
+	req := NewRequest("http://localhost", http.MethodGet, []byte(nil))
+	req.SetAuthorization(expValue)
+
+	if act := req.Header.Get(expHeader); act != expValue {
+		t.Errorf("expected %s, got %s", expValue, act)
+	}
+
+	// Case with nil Request.Header map.
+	req = &Request{
+		BaseURL: "http://localhost",
+		Method:  http.MethodGet,
+	}
+
+	req.SetAuthorization(expValue)
+
+	if act := req.Header.Get(expHeader); act != expValue {
+		t.Errorf("expected %s, got %s", expValue, act)
+	}
+}
+
+func TestNewClient(t *testing.T) {
+	c := NewClient()
+
+	testClientGet(t, c)
+}
+
+func TestNewClientWithConfig(t *testing.T) {
+	c := NewClientWithConfig(DefaultClientConfig())
+
+	testClientGet(t, c)
+}
+
+func testClientGet(t *testing.T, c *Client) {
+	type testCase struct {
+		expected *testRequest
+		actual   *Response
+	}
+
+	tests := []*testCase{
+		{expected: &testRequest{code: 200, msg: "success"}},
+		{expected: &testRequest{code: 400, msg: "bad request"}},
+		{expected: &testRequest{code: 500, msg: "internal server error"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.expected.msg, func(tt *testing.T) {
+			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
+
+			var err error
+			tc.actual, err = c.Get(srv.URL)
+			if err != nil {
+				srv.Close()
+				tt.Errorf("failed to GET: %s", err)
+			}
+			srv.Close()
+
+			if tc.actual.StatusCode != tc.expected.code {
+				tt.Errorf("expected resp code %d, actual is %d", tc.expected.code, tc.actual.StatusCode)
+			}
+		})
 	}
 }
