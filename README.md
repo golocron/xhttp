@@ -1,4 +1,4 @@
-# xtypes
+# xhttp
 
 [![GoDoc](https://godoc.org/github.com/golocron/xhttp?status.svg)](https://godoc.org/github.com/golocron/xhttp) [![Go Report Card](https://goreportcard.com/badge/github.com/golocron/xhttp)](https://goreportcard.com/report/github.com/golocron/xhttp)
 
