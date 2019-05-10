@@ -4,7 +4,7 @@ package xhttp
 import (
 	"bytes"
 	"crypto/tls"
-	"errors"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -217,19 +217,17 @@ func (c *Client) SendRaw(req *http.Request) (*http.Response, error) {
 // buildResponse builds Response from http.Response.
 //
 // It takes care of closing body as well.
-func (c *Client) buildResponse(res *http.Response) (*Response, error) {
-	body, err := ioutil.ReadAll(res.Body)
+func (c *Client) buildResponse(resp *http.Response) (*Response, error) {
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	defer res.Body.Close()
-
 	response := &Response{
-		StatusCode: res.StatusCode,
-		Status:     res.Status,
+		StatusCode: resp.StatusCode,
+		Status:     resp.Status,
 		Body:       body,
-		Headers:    res.Header,
+		Headers:    resp.Header,
 	}
 
 	return response, nil
@@ -244,12 +242,16 @@ func (c *Client) Send(request *Request) (*Response, error) {
 	}
 
 	// Build the HTTP client and make the request.
-	res, err := c.SendRaw(req)
+	resp, err := c.SendRaw(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+
 	if err != nil {
 		return nil, err
 	}
 
-	return c.buildResponse(res)
+	return c.buildResponse(resp)
 }
 
 // Get makes GET request.
@@ -275,7 +277,7 @@ func (c *Client) DownloadFile(url, filename string) error {
 	}
 
 	if resp.StatusCode != 200 {
-		return errors.New(resp.Status)
+		return fmt.Errorf("download failed: %s", resp.Status)
 	}
 
 	return ioutil.WriteFile(filename, resp.Body, 0644)
