@@ -41,7 +41,7 @@ func TestGet(t *testing.T) {
 			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
 
 			var err error
-			tc.actual, err = Get(srv.URL)
+			tc.actual, err = GET(srv.URL)
 			if err != nil {
 				srv.Close()
 				tt.Errorf("failed to GET: %s", err)
@@ -115,7 +115,7 @@ func TestSendRaw(t *testing.T) {
 				tt.Errorf("failed to Send: %s", err)
 			}
 
-			tc.actual, err = SendRaw(req)
+			tc.actual, err = Do(req)
 			if err != nil {
 				srv.Close()
 				tt.Errorf("failed to Send: %s", err)
@@ -146,7 +146,7 @@ func TestPost(t *testing.T) {
 			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
 
 			var err error
-			tc.actual, err = Post(srv.URL, "application/octet-stream", tc.expected.body)
+			tc.actual, err = POST(srv.URL, "application/octet-stream", tc.expected.body)
 			if err != nil {
 				srv.Close()
 				tt.Errorf("failed to Send: %s", err)
@@ -313,7 +313,7 @@ func testClientGet(t *testing.T, c *Client) {
 			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
 
 			var err error
-			tc.actual, err = c.Get(srv.URL)
+			tc.actual, err = c.GET(srv.URL)
 			if err != nil {
 				srv.Close()
 				tt.Errorf("failed to GET: %s", err)
