@@ -29,7 +29,7 @@ func main() {
 
 func example1() error {
 	url := strings.Join([]string{baseURL, "get"}, "/")
-	resp, err := xhttp.Get(url)
+	resp, err := xhttp.GET(url)
 	if err != nil {
 		return errors.Wrapf(err, "http request failed: method %s, url %s", http.MethodGet, url)
 	}
