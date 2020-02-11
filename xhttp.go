@@ -91,7 +91,7 @@ type ClientConfig struct {
 
 // Client represents a custom http client wrapper around net/http.Client.
 type Client struct {
-	HTTPClient http.Client
+	*http.Client
 }
 
 // NewClient returns a Client with customized default settings.
@@ -132,7 +132,7 @@ func createClient(cfg *ClientConfig) *Client {
 
 	// Finally, create a custom http client.
 	client := &Client{
-		HTTPClient: http.Client{
+		Client: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: transport,
 		},
@@ -154,36 +154,6 @@ func DefaultClientConfig() *ClientConfig {
 		SkipTLSVerify:         false,
 		IncludeRootCA:         false,
 	}
-}
-
-// Do performs a request based on http.Request.
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	return c.HTTPClient.Do(req)
-}
-
-// Get makes a Get request.
-func (c *Client) Get(url string) (*http.Response, error) {
-	return c.HTTPClient.Get(url)
-}
-
-// Head makes a Head request.
-func (c *Client) Head(url string) (*http.Response, error) {
-	return c.HTTPClient.Head(url)
-}
-
-// Post makes a Post request.
-func (c *Client) Post(url, contentType string, body io.Reader) (*http.Response, error) {
-	return c.HTTPClient.Post(url, contentType, body)
-}
-
-// PostForm makes a PostForm request.
-func (c *Client) PostForm(url string, data url.Values) (*http.Response, error) {
-	return c.HTTPClient.PostForm(url, data)
-}
-
-// CloseIdleConnections calls to the underlying client's CloseIdleConnections.
-func (c *Client) CloseIdleConnections() {
-	c.HTTPClient.CloseIdleConnections()
 }
 
 // GET makes a Get request.
