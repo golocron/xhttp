@@ -2,12 +2,19 @@ package xhttp
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 )
+
+type testCase struct {
+	expected *testRequest
+	actual   *Response
+}
 
 type testRequest struct {
 	code int
@@ -17,19 +24,35 @@ type testRequest struct {
 	fail bool
 }
 
-func createTestHandler(code int, msg string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(code)
-		w.Write([]byte(msg))
+func TestInterface(t *testing.T) {
+	type Interface interface {
+		CloseIdleConnections()
+		Do(req *http.Request) (*http.Response, error)
+		Get(url string) (resp *http.Response, err error)
+		Head(url string) (resp *http.Response, err error)
+		Post(url, contentType string, body io.Reader) (resp *http.Response, err error)
+		PostForm(url string, data url.Values) (resp *http.Response, err error)
 	}
+
+	var (
+		_ Interface = &http.Client{}
+		_ Interface = NewClient()
+	)
 }
 
-func TestGet(t *testing.T) {
-	type testCase struct {
-		expected *testRequest
-		actual   *Response
-	}
+func TestNewClient(t *testing.T) {
+	c := NewClient()
 
+	testClientGet(t, c)
+}
+
+func TestNewClientWithConfig(t *testing.T) {
+	c := NewClientWithConfig(DefaultClientConfig())
+
+	testClientGet(t, c)
+}
+
+func TestGET(t *testing.T) {
 	tests := []*testCase{
 		{expected: &testRequest{code: 200, msg: "success"}},
 		{expected: &testRequest{code: 400, msg: "bad request"}},
@@ -55,12 +78,33 @@ func TestGet(t *testing.T) {
 	}
 }
 
-func TestSend(t *testing.T) {
-	type testCase struct {
-		expected *testRequest
-		actual   *Response
+func TestPOST(t *testing.T) {
+	tests := []*testCase{
+		{expected: &testRequest{code: 200, mtd: http.MethodPost, msg: "success", body: []byte("success")}},
+		{expected: &testRequest{code: 400, mtd: http.MethodPost, msg: "bad request", body: []byte("bad request")}},
+		{expected: &testRequest{code: 500, mtd: http.MethodPost, msg: "internal server error", body: []byte("internal server error")}},
 	}
 
+	for _, tc := range tests {
+		t.Run(tc.expected.msg, func(tt *testing.T) {
+			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
+
+			var err error
+			tc.actual, err = POST(srv.URL, "application/octet-stream", tc.expected.body)
+			if err != nil {
+				srv.Close()
+				tt.Errorf("failed to Send: %s", err)
+			}
+			srv.Close()
+
+			if tc.actual.StatusCode != tc.expected.code {
+				tt.Errorf("expected resp code %d, actual is %d", tc.expected.code, tc.actual.StatusCode)
+			}
+		})
+	}
+}
+
+func TestSend(t *testing.T) {
 	tests := []*testCase{
 		{expected: &testRequest{code: 200, mtd: http.MethodGet, msg: "success"}},
 		{expected: &testRequest{code: 400, mtd: http.MethodGet, msg: "bad request"}},
@@ -93,79 +137,7 @@ func TestSend(t *testing.T) {
 	}
 }
 
-func TestSendRaw(t *testing.T) {
-	type testCase struct {
-		expected *testRequest
-		actual   *http.Response
-	}
-
-	tests := []*testCase{
-		{expected: &testRequest{code: 200, mtd: http.MethodGet, msg: "success"}},
-		{expected: &testRequest{code: 400, mtd: http.MethodGet, msg: "bad request"}},
-		{expected: &testRequest{code: 500, mtd: http.MethodGet, msg: "internal server error"}},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.expected.msg, func(tt *testing.T) {
-			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
-
-			req, err := http.NewRequest(tc.expected.mtd, srv.URL, bytes.NewBuffer(tc.expected.body))
-			if err != nil {
-				srv.Close()
-				tt.Errorf("failed to Send: %s", err)
-			}
-
-			tc.actual, err = Do(req)
-			if err != nil {
-				srv.Close()
-				tt.Errorf("failed to Send: %s", err)
-			}
-			srv.Close()
-
-			if tc.actual.StatusCode != tc.expected.code {
-				tt.Errorf("expected resp code %d, actual is %d", tc.expected.code, tc.actual.StatusCode)
-			}
-		})
-	}
-}
-
-func TestPost(t *testing.T) {
-	type testCase struct {
-		expected *testRequest
-		actual   *Response
-	}
-
-	tests := []*testCase{
-		{expected: &testRequest{code: 200, mtd: http.MethodPost, msg: "success", body: []byte("success")}},
-		{expected: &testRequest{code: 400, mtd: http.MethodPost, msg: "bad request", body: []byte("bad request")}},
-		{expected: &testRequest{code: 500, mtd: http.MethodPost, msg: "internal server error", body: []byte("internal server error")}},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.expected.msg, func(tt *testing.T) {
-			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
-
-			var err error
-			tc.actual, err = POST(srv.URL, "application/octet-stream", tc.expected.body)
-			if err != nil {
-				srv.Close()
-				tt.Errorf("failed to Send: %s", err)
-			}
-			srv.Close()
-
-			if tc.actual.StatusCode != tc.expected.code {
-				tt.Errorf("expected resp code %d, actual is %d", tc.expected.code, tc.actual.StatusCode)
-			}
-		})
-	}
-}
-
 func TestDownloadFile(t *testing.T) {
-	type testCase struct {
-		expected *testRequest
-		actual   *Response
-	}
-
 	tests := []*testCase{
 		{expected: &testRequest{code: 200, msg: "success"}},
 		{expected: &testRequest{code: 400, msg: "bad request", fail: true}},
@@ -209,7 +181,43 @@ func TestDownloadFile(t *testing.T) {
 	}
 }
 
-func TestSetContentTypeJSON(t *testing.T) {
+func TestDo(t *testing.T) {
+	type testCase struct {
+		expected *testRequest
+		actual   *http.Response
+	}
+
+	tests := []*testCase{
+		{expected: &testRequest{code: 200, mtd: http.MethodGet, msg: "success"}},
+		{expected: &testRequest{code: 400, mtd: http.MethodGet, msg: "bad request"}},
+		{expected: &testRequest{code: 500, mtd: http.MethodGet, msg: "internal server error"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.expected.msg, func(tt *testing.T) {
+			srv := httptest.NewServer(http.Handler(createTestHandler(tc.expected.code, tc.expected.msg)))
+
+			req, err := http.NewRequest(tc.expected.mtd, srv.URL, bytes.NewBuffer(tc.expected.body))
+			if err != nil {
+				srv.Close()
+				tt.Errorf("failed to Send: %s", err)
+			}
+
+			tc.actual, err = Do(req)
+			if err != nil {
+				srv.Close()
+				tt.Errorf("failed to Send: %s", err)
+			}
+			srv.Close()
+
+			if tc.actual.StatusCode != tc.expected.code {
+				tt.Errorf("expected resp code %d, actual is %d", tc.expected.code, tc.actual.StatusCode)
+			}
+		})
+	}
+}
+
+func TestRequest_SetContentTypeJSON(t *testing.T) {
 	expHeader := "Content-Type"
 	expValue := "application/json"
 
@@ -234,7 +242,7 @@ func TestSetContentTypeJSON(t *testing.T) {
 	}
 }
 
-func TestSetContentType(t *testing.T) {
+func TestRequest_SetContentType(t *testing.T) {
 	expHeader := "Content-Type"
 	expValue := "application/test-content-type"
 
@@ -259,7 +267,7 @@ func TestSetContentType(t *testing.T) {
 	}
 }
 
-func TestSetAuthorization(t *testing.T) {
+func TestRequest_SetAuthorization(t *testing.T) {
 	expHeader := "Authorization"
 	expValue := "Test: Authorization"
 
@@ -284,24 +292,16 @@ func TestSetAuthorization(t *testing.T) {
 	}
 }
 
-func TestNewClient(t *testing.T) {
-	c := NewClient()
+// Helpers.
 
-	testClientGet(t, c)
-}
-
-func TestNewClientWithConfig(t *testing.T) {
-	c := NewClientWithConfig(DefaultClientConfig())
-
-	testClientGet(t, c)
+func createTestHandler(code int, msg string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(code)
+		w.Write([]byte(msg))
+	}
 }
 
 func testClientGet(t *testing.T, c *Client) {
-	type testCase struct {
-		expected *testRequest
-		actual   *Response
-	}
-
 	tests := []*testCase{
 		{expected: &testRequest{code: 200, msg: "success"}},
 		{expected: &testRequest{code: 400, msg: "bad request"}},
@@ -326,3 +326,5 @@ func testClientGet(t *testing.T, c *Client) {
 		})
 	}
 }
+
+//
