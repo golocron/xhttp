@@ -4,12 +4,15 @@ package xhttp
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -28,6 +31,9 @@ const (
 var (
 	// DefaultClient is used if no custom HTTP client is defined.
 	DefaultClient *Client = NewClient()
+
+	// ErrInvalidValue indicates a wrong type of the value passed to Unmarshal*To methods.
+	ErrInvalidValue = errors.New("xhttp: receiving value must be a pointer")
 )
 
 // Do makes a request based on http.Request using DefaultClient.
@@ -297,4 +303,21 @@ type Response struct {
 	Status     string
 	Body       []byte
 	Headers    http.Header
+}
+
+func (r *Response) UnmarshalJSONTo(val interface{}) error {
+	if err := ensurePointer(val); err != nil {
+		return err
+	}
+
+	return json.Unmarshal(r.Body, val)
+}
+
+func ensurePointer(v interface{}) error {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Ptr {
+		return ErrInvalidValue
+	}
+
+	return nil
 }

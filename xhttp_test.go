@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type testCase struct {
@@ -289,6 +291,29 @@ func TestRequest_SetAuthorization(t *testing.T) {
 
 	if act := req.Header.Get(expHeader); act != expValue {
 		t.Errorf("expected %s, got %s", expValue, act)
+	}
+}
+
+func TestResponse_UnmarshalJSONTo(t *testing.T) {
+	resp := &Response{Body: []byte(`{"name": "test"}`)}
+	val := &struct {
+		Name string `json:"name"`
+	}{}
+
+	{
+		err := resp.UnmarshalJSONTo(val)
+		assert.Equal(t, nil, err)
+
+		exp := &struct {
+			Name string `json:"name"`
+		}{Name: "test"}
+
+		assert.Equal(t, exp, val)
+	}
+
+	{
+		err := resp.UnmarshalJSONTo(*val)
+		assert.Equal(t, ErrInvalidValue, err)
 	}
 }
 
